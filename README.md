@@ -68,6 +68,13 @@ python -m unittest discover -s research/tests -v   # 53 项单元测试
 
 > `.idea/workspace.xml`、`misc.xml` 等含本机状态的文件已忽略；`Claw.iml`、`modules.xml`、`vcs.xml`、`runConfigurations/` 入库，换机器 clone 后开箱即用。
 
+## Git 与版本管理
+
+- 本地仓库已初始化，默认分支 `main`，初始提交包含 60 个源文件 / 文档 / 配置台 / PyCharm 配置 / CI 文件。
+- `.gitignore` 排除 `data/`（演示数据、回测结果）、`logs/`、`.workbuddy/`、所有 `*.secret` / `*.key` / `*.token` / `*_credentials.*` / `.env*`，以及 PyCharm 的本机状态文件。**仓库内不含账号、密码或真实行情数据。**
+- `.gitattributes` 统一 LF 行尾。`.github/workflows/tests.yml` 在 push / PR 时对 Python 3.9 / 3.11 / 3.13 跑 53 项单元测试、5 个 CLI 入口冒烟，并用 AST 扫描阻止 Python 3.7+ 语法混入（保证同一份内核可贴进 QMT 的 3.6.8 沙箱）。
+- 本机到 `github.com` 的 Git 通道被网络代理阻断（仅 `api.github.com` 可达），远程同步走 WorkBuddy 已授权的 GitHub 连接器；如需在本机直接 `git push`，需先打通该域名并配置凭据。
+
 ## 目录
 
 ```
