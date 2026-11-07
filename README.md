@@ -73,7 +73,8 @@ python -m unittest discover -s research/tests -v   # 53 项单元测试
 - 本地仓库已初始化，默认分支 `main`，初始提交包含 60 个源文件 / 文档 / 配置台 / PyCharm 配置 / CI 文件。
 - `.gitignore` 排除 `data/`（演示数据、回测结果）、`logs/`、`.workbuddy/`、所有 `*.secret` / `*.key` / `*.token` / `*_credentials.*` / `.env*`，以及 PyCharm 的本机状态文件。**仓库内不含账号、密码或真实行情数据。**
 - `.gitattributes` 统一 LF 行尾。`.github/workflows/tests.yml` 在 push / PR 时对 Python 3.9 / 3.11 / 3.13 跑 53 项单元测试、5 个 CLI 入口冒烟，并用 AST 扫描阻止 Python 3.7+ 语法混入（保证同一份内核可贴进 QMT 的 3.6.8 沙箱）。
-- 本机到 `github.com` 的 Git 通道被网络代理阻断（仅 `api.github.com` 可达），远程同步走 WorkBuddy 已授权的 GitHub 连接器；如需在本机直接 `git push`，需先打通该域名并配置凭据。
+- 远程仓库：`https://github.com/RealAllen/Claw`（`origin`，分支 `main`，与本地提交一致）。2026-11-08 完成首次推送，GitHub Actions `tests` 工作流首次运行成功。
+- 若 `git push` 报 `CONNECT tunnel failed, 502` 或 `schannel: server closed abruptly`，是会话注入的 `HTTP(S)_PROXY` 阻断了 `github.com` 的 Git 通道。清空 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`（含小写形式）后执行 `git -c http.proxy= -c https.proxy= -c http.sslBackend=openssl push origin main`；首次由 Git Credential Manager 弹窗登录 GitHub，凭据会缓存，后续直接 `git push` 即可。
 
 ## 目录
 
