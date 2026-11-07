@@ -1,0 +1,17 @@
+# 依赖
+
+本平台运行时**不需要任何第三方包**，全部使用 Python 标准库（`csv`, `json`, `http.server`, `unittest`, `math`, `statistics`, `datetime`, `argparse`）。
+
+Python 版本：
+- 研究层：Python 3.8+（本机实测 3.13.14）
+- 执行层：`shared/strategy_core.py` 与 `execution/qmt/*.py` 保持 Python 3.6.8 语法兼容
+
+可选（后续接入真实数据源时再装，不影响当前功能）：
+
+```
+# pandas>=2.0        # 大规模因子计算加速
+# duckdb>=1.0        # 本地列式查询
+# pyarrow>=15.0      # Parquet 落盘
+```
+
+开发期如需额外的测试报告工具，可自行安装；`python -m unittest discover -s research/tests -v` 不依赖任何第三方包。

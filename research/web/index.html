@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claw · 本地量化研究看板</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Claw · 本地量化研究看板</h1>
+      <p class="sub">零依赖 · 纯只读 · 不接触交易凭据 · 仅绑定 127.0.0.1</p>
+    </div>
+    <div class="badges">
+      <a class="badge" href="config.html">策略配置台 →</a>
+      <span id="badge-demo" class="badge warn">数据加载中</span>
+      <span class="badge ok">Kill Switch ON</span>
+      <span class="badge">半自动（人工确认）</span>
+    </div>
+  </header>
+
+  <div class="notice">
+    <strong>本页的定位：</strong>这是<strong>盘前配置 + 盘后复盘</strong>工作台，不参与盘中实时回路。
+    「使用账户 → 盘中实时选股 → 指标判定 → 自动买卖」这四项能力已完整实现在
+    <strong>浙商证券标准版 QMT 内置 Python 沙箱</strong>里（策略每 3 秒扫全市场全推行情、两级筛选、风控、幂等下单、回报轮询、对账熔断），
+    实时日志/委托/持仓请在 QMT 客户端查看。两层之间只允许盘前盘后<strong>人工</strong>中转规则，
+    <strong>禁止任何实时 HTTP / socket / 文件桥接</strong>。本页不展示也不存储任何账户密码。
+  </div>
+
+  <section class="card">
+    <div class="card-head"><h2>能力归属 · 你要的功能分别跑在哪里</h2><a class="badge" href="config.html">去配置台编辑指标 →</a></div>
+    <div class="table-wrap"><table id="cap"><thead><tr><th>目标</th><th>实现位置</th><th>具体做法</th><th>本页承担</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>模拟盘净值曲线</h2>
+      <span class="hint" id="curve-hint"></span>
+    </div>
+    <div id="chart" class="chart"></div>
+    <p class="hint" id="assumptions"></p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <div class="card-head"><h2>成交信号流水</h2><span class="hint" id="events-hint"></span></div>
+      <div class="table-wrap"><table id="events"><thead><tr><th>时间</th><th>标的</th><th>方向</th><th>价格</th><th>数量</th><th>金额</th><th>幂等 ID</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>风控 / 精算拦截</h2><span class="hint" id="reject-hint"></span></div>
+      <div class="table-wrap"><table id="rejections"><thead><tr><th>时间</th><th>标的</th><th>阶段</th><th>原因</th></tr></thead><tbody></tbody></table></div>
+    </section>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <div class="card-head"><h2>最新一期扫描结果</h2><span class="hint" id="scan-hint"></span></div>
+      <div class="table-wrap"><table id="scan"><thead><tr><th>标的</th><th>最新价</th><th>涨跌幅</th><th>放量倍数</th><th>信号</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>压力测试（假设情景）</h2><span class="hint">仅风险画像，非损失预测</span></div>
+      <div class="table-wrap"><table id="stress"><thead><tr><th>情景</th><th>冲击</th><th>净值变化</th><th>净值之后</th></tr></thead><tbody></tbody></table></div>
+      <div class="card-head spaced"><h2>安全状态</h2></div>
+      <ul class="safety" id="safety"></ul>
+    </section>
+  </div>
+
+  <footer>
+    <p id="meta"></p>
+    <p class="disclaimer">免责声明：以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。任何投资决策应结合个人风险承受能力、资金状况和投资目标独立判断，必要时咨询持牌专业机构。过往表现不预示未来收益。</p>
+  </footer>
+</div>
+<script src="demo_data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

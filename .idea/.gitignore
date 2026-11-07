@@ -1,0 +1,12 @@
+# PyCharm 自动生成、含本机路径或个人使用痕迹的文件不入库
+/shelf/
+/workspace.xml
+/tasks.xml
+/usage.statistics.xml
+/dictionaries/
+/httpRequests/
+/dataSources/
+/dataSources.local.xml
+/misc.xml
+/contentModel.xml
+/cp-*.xml

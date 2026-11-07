@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claw · 策略配置台</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.notice.warn{background:var(--amber-soft);border-color:#fac775;color:#6b420a}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px}
+.row label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.row input,.row select,textarea{font:inherit;color:var(--text);background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 8px}
+.row input[type=number]{width:130px}
+.row input[type=text]{width:200px}
+.row input.short{width:110px}
+.cond{display:grid;grid-template-columns:1fr 130px 1fr 34px;gap:8px;margin-bottom:6px;align-items:center}
+.cond select,.cond input{font:inherit;color:var(--text);background:#fff;border:1px solid var(--border);border-radius:6px;padding:5px 7px;width:100%}
+.btn{font:inherit;cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--text);border-radius:6px;padding:6px 12px}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.danger{color:var(--red)}
+.btn:hover{filter:brightness(.97)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+#msg{font-size:12px;color:var(--muted)}
+textarea{width:100%;min-height:260px;font-family:Consolas,Monaco,monospace;font-size:12px;line-height:1.5;white-space:pre;overflow:auto}
+.cap td{white-space:normal;vertical-align:top}
+.cap .where{color:var(--blue);font-weight:500}
+.tag.no{background:var(--red-soft);color:var(--red)}
+.tag.yes{background:var(--teal-soft);color:var(--teal)}
+.subhead{font-size:13px;font-weight:500;margin:18px 0 8px;padding-top:12px;border-top:1px solid var(--border)}
+.subhead:first-child{border-top:none;margin-top:0;padding-top:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Claw · 策略配置台</h1>
+      <p class="sub">编辑「选股指标要求」→ 保存本地规则 → 盘前人工导出到浙商证券 QMT</p>
+    </div>
+    <div class="badges">
+      <a class="badge" href="index.html">← 回看板</a>
+      <span class="badge ok">仅 127.0.0.1</span>
+      <span class="badge warn">无实时交易通道</span>
+    </div>
+  </header>
+
+  <div class="notice warn">
+    <strong>先看这条：</strong>这里保存的只是<b>本地规则 JSON</b>，不会连接账户、不会下单，也不会与 QMT 建立任何实时通道。
+    盘中「实时选股 → 指标判定 → 自动买卖」<b>全部在浙商证券标准版 QMT 内置 Python 沙箱里闭环</b>，实时日志/委托/持仓请在 QMT 客户端查看。
+    规则改完后，需要你在盘前手动执行导出并粘贴进 QMT，禁止搭自动同步（那属于被清退的实时桥接）。
+  </div>
+
+  <section class="card">
+    <div class="card-head"><h2>你要的四项能力 · 分别在哪里实现</h2><span class="hint">架构对照</span></div>
+    <div class="table-wrap"><table class="cap" id="cap"><thead><tr><th>目标</th><th>实现位置</th><th>具体做法</th><th>本页是否承担</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>规则编辑</h2><span class="hint" id="digest">载入中…</span></div>
+
+    <div class="subhead">基础</div>
+    <div class="row">
+      <label>规则名称<input type="text" id="f-name"></label>
+      <label>版本<input type="text" class="short" id="f-version"></label>
+      <label>模式
+        <select id="f-mode">
+          <option value="semi_auto">半自动（只出信号，人工下单）</option>
+          <option value="full_auto">全自动（需 QMT 内另行开启）</option>
+          <option value="off">停用</option>
+        </select>
+      </label>
+      <label>信号冷却(分钟)<input type="number" id="f-cooldown" min="0"></label>
+      <label>交易时间窗<input type="text" id="f-windows" placeholder="09:35-11:25, 13:05-14:50"></label>
+    </div>
+
+    <div class="subhead">标的池过滤</div>
+    <div class="row">
+      <label><input type="checkbox" id="f-ex-st"> 排除 ST</label>
+      <label><input type="checkbox" id="f-ex-susp"> 排除停牌</label>
+      <label><input type="checkbox" id="f-ex-up"> 排除涨停</label>
+      <label><input type="checkbox" id="f-ex-down"> 排除跌停</label>
+      <label>允许板块<input type="text" id="f-boards" placeholder="主板, 创业板"></label>
+      <label>最少上市天数<input type="number" id="f-days" min="0"></label>
+      <label>最小成交额(元)<input type="number" id="f-minamount" min="0" step="1000000"></label>
+    </div>
+
+    <div class="subhead">风控硬前置（下单前逐条校验，不可跳过）</div>
+    <div class="row" id="risk-row"></div>
+
+    <div class="subhead">买入 · 一级快照条件（全市场粗筛）</div>
+    <div id="buy-cond"></div>
+    <button class="btn" data-add="buy-cond">+ 添加条件</button>
+    <div class="row" style="margin-top:8px">
+      <label>组合逻辑<select id="f-buy-logic"><option value="AND">全部满足 AND</option><option value="OR">任一满足 OR</option></select></label>
+    </div>
+
+    <div class="subhead">买入 · 二级 K 线条件（只对候选池计算）</div>
+    <div id="buy-precision"></div>
+    <button class="btn" data-add="buy-precision">+ 添加条件</button>
+
+    <div class="subhead">卖出 · 持仓条件（只对已持有且可卖的仓位判定）</div>
+    <div id="sell-cond"></div>
+    <button class="btn" data-add="sell-cond">+ 添加条件</button>
+    <div class="row" style="margin-top:8px">
+      <label>组合逻辑<select id="f-sell-logic"><option value="OR">任一满足 OR</option><option value="AND">全部满足 AND</option></select></label>
+    </div>
+
+    <div class="subhead">原始 JSON（保存时以此为准，可直接手改）</div>
+    <textarea id="raw" spellcheck="false"></textarea>
+    <div class="actions">
+      <button class="btn primary" id="save">保存到本地规则</button>
+      <button class="btn" id="reload">重新载入</button>
+      <button class="btn" id="from-json">把 JSON 载入到表单</button>
+      <span id="msg"></span>
+    </div>
+    <p class="hint" style="margin-top:10px">保存后执行 <code>python research/cli.py export</code> 生成 QMT 可粘贴的 <code>rules_snapshot.py</code>，核对规则指纹后<strong>人工</strong>导入 QMT 内置策略目录。</p>
+  </section>
+
+  <footer><p class="disclaimer">免责声明：以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。任何投资决策应结合个人风险承受能力、资金状况和投资目标独立判断，必要时咨询持牌专业机构。过往表现不预示未来收益。</p></footer>
+</div>
+<script src="config.js"></script>
+</body>
+</html>

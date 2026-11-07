@@ -1,0 +1,48 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Unit tests (stdlib only)
+        run: python -m unittest discover -s research/tests -v
+      - name: Smoke test real CLI entrypoints
+        run: |
+          python research/cli.py demo
+          python research/cli.py backtest
+          python research/cli.py scan
+          python research/cli.py export
+          python research/cli.py qmt-sim
+      - name: Python 3.6 syntax guard (AST)
+        run: |
+          python - <<'PY'
+          import ast, os
+          bad = []
+          for root, dirs, files in os.walk('.'):
+              dirs[:] = [d for d in dirs if d not in ('.git', '__pycache__', 'data', '.workbuddy')]
+              for fn in files:
+                  if not fn.endswith('.py'):
+                      continue
+                  p = os.path.join(root, fn)
+                  tree = ast.parse(open(p, encoding='utf-8').read(), filename=p)
+                  for n in ast.walk(tree):
+                      if isinstance(n, (ast.NamedExpr, ast.JoinedStr, ast.AnnAssign,
+                                        ast.AsyncFunctionDef, ast.AsyncFor, ast.AsyncWith)):
+                          bad.append('%s:%s %s' % (p, n.lineno, type(n).__name__))
+          print('3.7+ constructs:', bad if bad else 'none')
+          if bad:
+              raise SystemExit(1)
+          PY

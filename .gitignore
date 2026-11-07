@@ -1,0 +1,32 @@
+# 忽略规则：任何账户凭据、真实行情、日志都不得进入版本库
+
+data/
+logs/
+*.secret
+*.key
+*.token
+*_credentials.*
+config/local.*
+.env
+.env.*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+*.parquet
+*.duckdb
+.DS_Store
+Thumbs.db
+
+# 会话数据与本机开发环境（不入库）
+.workbuddy/
+.venv/
+venv/
+out/
+.idea/workspace.xml
+.idea/shelf/
+*.log
+
+# 例外：保留示例规则与演示数据生成的说明
+!shared/rules/*.json
+!research/web/demo_data.js

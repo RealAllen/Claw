@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "name": "示例动量筛选",
+  "note": "所有阈值均为示例值，不是投资建议；需由使用者确认后修改。",
+  "mode": "semi_auto",
+  "cooldown_minutes": 30,
+  "time_windows": [["09:35", "11:25"], ["13:05", "14:50"]],
+  "universe": {
+    "exclude_st": true,
+    "exclude_suspended": true,
+    "exclude_limit_up": true,
+    "exclude_limit_down": false,
+    "boards": ["主板", "创业板"],
+    "min_list_days": 60,
+    "min_amount": 10000000
+  },
+  "risk": {
+    "max_order_amount": 20000,
+    "max_position_pct": 10,
+    "max_total_position_pct": 80,
+    "max_daily_orders": 20,
+    "max_daily_loss_pct": 2,
+    "max_daily_turnover": 200000,
+    "lot_size": 100
+  },
+  "buy": {
+    "logic": "AND",
+    "conditions": [
+      {"field": "pct_chg", "op": "between", "value": [0.5, 6.0]},
+      {"field": "volume_ratio", "op": ">=", "value": 1.0},
+      {"field": "vol_x", "op": ">=", "value": 1.0}
+    ],
+    "precision_conditions": [
+      {"field": "ma_bull", "op": "==", "value": true},
+      {"field": "macd_hist", "op": ">", "value": 0},
+      {"field": "rsi6", "op": "<", "value": 75}
+    ],
+    "precision_logic": "AND"
+  },
+  "sell": {
+    "logic": "OR",
+    "conditions": [
+      {"field": "pct_chg", "op": "<=", "value": -2.5},
+      {"field": "pct_chg_5m", "op": "<=", "value": -2.0}
+    ],
+    "precision_conditions": [],
+    "precision_logic": "AND"
+  }
+}
