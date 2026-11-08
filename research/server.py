@@ -1,21 +1,26 @@
 # -*- coding: utf-8 -*-
-"""仅绑定 127.0.0.1 的本地看板与策略配置台（Python 标准库 http.server）。
+"""仅绑定 127.0.0.1 的本地工作台服务（Python 标准库 http.server）。
 
 安全约束：
 - 非回环地址直接拒绝启动；
-- 唯一的写接口是 POST /api/rules，只写本地规则 JSON，绝不写券商/账户/下单相关内容；
-- 不提供任何下单接口、不建立任何与 QMT 的实时通道（禁 HTTP/socket/文件桥接）；
-- 静态文件限制在 research/web 目录内，防目录穿越；
+- 唯一的规则写接口是 POST /api/rules，只写本地规则 JSON；
+- POST /api/actions 只允许固定白名单里的本地研究命令（无参数、无 shell）；
+- 不提供任何下单接口、不读取账户、不建立与 QMT 的实时通道（禁 HTTP/socket/文件桥接）；
+- 静态文件限制在 research/web 目录内，文档读取限制在白名单内，防目录穿越；
 - 无外部 CDN、无外网依赖。
 """
 from __future__ import division
 
+import ast
+import hashlib
 import json
 import os
+import subprocess
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
@@ -34,6 +39,12 @@ CONTENT_TYPES = {
 _CACHE = {"dashboard": None, "signature": None}
 
 MAX_RULES_BYTES = 262144
+MAX_ACTION_BYTES = 4096
+ACTION_TIMEOUT = 90
+MAX_OUTPUT_CHARS = 20000
+MAX_DOC_CHARS = 200000
+ACTION_LOCK = threading.Lock()
+ACTION_LOG = []
 FORBIDDEN_RULE_KEYS = (
     "password", "passwd", "secret", "token", "api_key", "apikey", "credential",
     "account_id", "fund_account", "passorder", "cancel_order", "socket", "http",
@@ -105,6 +116,80 @@ CAPABILITIES = [
      "in_local_web": False},
 ]
 
+# ---------------------------------------------------------------- 功能导航信息架构
+# usage: view=切换到本地视图 / action=执行白名单本地命令 / doc=阅读白名单文档
+GROUPS = ("工作台", "研究与演练", "执行层", "文档与合规", "系统")
+FEATURES = [
+    {"id": "overview", "group": "工作台", "label": "功能总览", "usage": "view", "target": "overview",
+     "layer": "本地", "desc": "全部功能按分组梳理，标注运行层级与使用方式，可从这里直达任一功能。"},
+    {"id": "config", "group": "工作台", "label": "策略配置台", "usage": "view", "target": "config",
+     "layer": "本地", "desc": "可视化编辑指标、阈值、标的池、时间窗与风控硬前置，保存为本地规则 JSON。"},
+    {"id": "review", "group": "工作台", "label": "模拟盘复盘", "usage": "view", "target": "review",
+     "layer": "本地", "desc": "净值曲线、绩效 KPI、成交信号流水、风控拦截与压力测试。"},
+    {"id": "scan-view", "group": "工作台", "label": "最新扫描结果", "usage": "view", "target": "scan",
+     "layer": "本地", "desc": "最近一根 bar 的全市场扫描明细与命中信号。"},
+    {"id": "capabilities", "group": "工作台", "label": "能力归属", "usage": "view", "target": "cap",
+     "layer": "两层", "desc": "「账户 / 实时选股 / 指标 / 自动买卖」四项能力分别运行在哪一层。"},
+
+    {"id": "demo", "group": "研究与演练", "label": "生成演示数据", "usage": "action", "target": "demo",
+     "layer": "本地", "desc": "重新生成确定性合成行情与离线看板数据（明确标注 DEMO）。"},
+    {"id": "backtest", "group": "研究与演练", "label": "运行回测", "usage": "action", "target": "backtest",
+     "layer": "本地", "desc": "按当前规则跑 T+1 / 费用 / 滑点模拟盘，输出绩效与明细 JSON。"},
+    {"id": "scan", "group": "研究与演练", "label": "扫描最新 bar", "usage": "action", "target": "scan",
+     "layer": "本地", "desc": "对最新一根 bar 做一次全市场两级筛选，输出命中信号。"},
+    {"id": "simulate", "group": "研究与演练", "label": "无券商全链路演练", "usage": "action", "target": "qmt-sim",
+     "layer": "本地", "desc": "假 ContextInfo 跑完整自动买卖链路，不连账户、不发真实委托。"},
+    {"id": "export", "group": "研究与演练", "label": "导出沙箱规则", "usage": "action", "target": "export",
+     "layer": "本地", "desc": "生成 QMT 可粘贴的规则字面量并同步策略内核副本；需人工导入沙箱。"},
+    {"id": "tests", "group": "研究与演练", "label": "运行单元测试", "usage": "action", "target": "tests",
+     "layer": "本地", "desc": "执行完整回归测试套件，验证内核、风控、实盘链路与 3.6 兼容。"},
+
+    {"id": "qmt", "group": "执行层", "label": "QMT 执行层状态", "usage": "view", "target": "qmt",
+     "layer": "QMT", "desc": "查看实时链路组成、六道闸门当前状态与人工导入步骤；实时日志在 QMT 客户端。"},
+    {"id": "safety", "group": "执行层", "label": "安全状态", "usage": "view", "target": "safety",
+     "layer": "两层", "desc": "只读、绑定地址、凭据、内核哈希一致性与实盘开关画像。"},
+
+    {"id": "indicators", "group": "文档与合规", "label": "指标字典与规则 DSL", "usage": "doc", "target": "INDICATORS",
+     "layer": "文档", "desc": "全部指标字段定义、计算口径与规则文件写法。"},
+    {"id": "checklist", "group": "文档与合规", "label": "实盘上线检查表", "usage": "doc", "target": "GO_LIVE_CHECKLIST",
+     "layer": "文档", "desc": "阶段 0~5 的验收门槛与剩余阻塞项。"},
+    {"id": "compliance", "group": "文档与合规", "label": "合规边界", "usage": "doc", "target": "COMPLIANCE",
+     "layer": "文档", "desc": "为什么实时决策必须闭环在券商沙箱内、哪些通道被禁止。"},
+    {"id": "qmt-readme", "group": "文档与合规", "label": "QMT 接入说明", "usage": "doc", "target": "QMT_README",
+     "layer": "文档", "desc": "券商 API 适配、probe 诊断与启用全自动的五步开关。"},
+    {"id": "runbook", "group": "文档与合规", "label": "运维手册", "usage": "doc", "target": "RUNBOOK",
+     "layer": "文档", "desc": "盘前 / 盘中 / 盘后流程与变更规范。"},
+    {"id": "emergency", "group": "文档与合规", "label": "应急手册", "usage": "doc", "target": "EMERGENCY",
+     "layer": "文档", "desc": "Kill Switch、撤单、熔断与异常处置顺序。"},
+    {"id": "handoff", "group": "文档与合规", "label": "项目交接卡", "usage": "doc", "target": "PROJECT_CONTEXT",
+     "layer": "文档", "desc": "压缩上下文；新会话继续提需求时先读它。"},
+    {"id": "readme", "group": "文档与合规", "label": "README", "usage": "doc", "target": "README",
+     "layer": "文档", "desc": "项目总览、快速开始与目录结构。"},
+
+    {"id": "actions-result", "group": "系统", "label": "运行结果", "usage": "view", "target": "actions",
+     "layer": "本地", "desc": "最近一次本地命令的退出码、耗时与完整输出。"},
+    {"id": "action-log", "group": "系统", "label": "操作日志", "usage": "view", "target": "log",
+     "layer": "本地", "desc": "本次服务进程内执行过的功能记录（仅内存，重启清空）。"},
+]
+
+# 只允许这 6 个固定命令；不接受任何用户参数，不经过 shell。
+ACTION_NAMES = ("demo", "backtest", "scan", "export", "qmt-sim", "tests")
+
+# 文档白名单：路径以项目根为基准，禁止任意路径。
+DOC_FILES = {
+    "INDICATORS": ("docs", "INDICATORS.md"),
+    "GO_LIVE_CHECKLIST": ("docs", "GO_LIVE_CHECKLIST.md"),
+    "COMPLIANCE": ("docs", "COMPLIANCE.md"),
+    "RUNBOOK": ("ops", "RUNBOOK.md"),
+    "EMERGENCY": ("ops", "EMERGENCY.md"),
+    "QMT_README": ("execution", "qmt", "README.md"),
+    "PROJECT_CONTEXT": ("PROJECT_CONTEXT.md",),
+    "README": ("README.md",),
+}
+
+GATE_KEYS = ("BROKER_NAME", "ACCOUNT_ID", "KILL_SWITCH", "DRY_RUN", "MODE",
+             "REPORT_CONFIRMED", "LIVE_ACKNOWLEDGED", "SCAN_PERIOD")
+
 
 def _csv_path():
     return os.environ.get("CLAW_DATA_CSV", data.DEMO_CSV)
@@ -168,6 +253,150 @@ def rules_payload():
     }
 
 
+def features_payload():
+    """左侧导航与功能梳理的数据源。"""
+    return {
+        "groups": list(GROUPS),
+        "features": [dict(item) for item in FEATURES],
+        "actions": list(ACTION_NAMES),
+        "docs": sorted(DOC_FILES.keys()),
+        "note": "所有 action 均为本地研究命令；本服务不提供下单、账户或实时桥接接口",
+    }
+
+
+def _read_gates():
+    """用 AST 静态读取执行层开关，不导入、不执行 QMT 侧任何模块。"""
+    path = os.path.join(_ROOT, "execution", "qmt", "live_config.py")
+    gates = {}
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            tree = ast.parse(handle.read(), filename=path)
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                    and isinstance(node.targets[0], ast.Name):
+                key = node.targets[0].id
+                if key in GATE_KEYS:
+                    try:
+                        gates[key] = ast.literal_eval(node.value)
+                    except (ValueError, TypeError):
+                        pass
+    except (IOError, OSError, SyntaxError):
+        pass
+    return gates
+
+
+def _sha256(path):
+    with open(path, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+
+def status_payload():
+    """系统与合规状态画像（全部只读）。"""
+    gates = _read_gates()
+    core = os.path.join(_ROOT, "shared", "strategy_core.py")
+    copy = os.path.join(_ROOT, "execution", "qmt", "strategy_core.py")
+    snapshot = os.path.join(_ROOT, "execution", "qmt", "rules_snapshot.py")
+    core_hash = _sha256(core) if os.path.isfile(core) else ""
+    kernel_identical = bool(core_hash) and os.path.isfile(copy) and _sha256(copy) == core_hash
+    snapshot_ok = False
+    if os.path.isfile(snapshot) and core_hash:
+        with open(snapshot, "r", encoding="utf-8") as handle:
+            snapshot_ok = core_hash in handle.read()
+    allowed = bool(
+        gates.get("MODE") == "full_auto"
+        and not gates.get("DRY_RUN", True)
+        and not gates.get("KILL_SWITCH", True)
+        and gates.get("REPORT_CONFIRMED") is True
+        and gates.get("LIVE_ACKNOWLEDGED") is True
+    )
+    return {
+        "bind": "127.0.0.1",
+        "read_only": True,
+        "broker": gates.get("BROKER_NAME", "未知"),
+        "gates": gates,
+        "live_order_allowed": allowed,
+        "account_id_in_code": bool(gates.get("ACCOUNT_ID")),
+        "rules_digest": rules_engine.rule_digest(rules_engine.load_rules()),
+        "kernel_identical": kernel_identical,
+        "snapshot_hash_matches": snapshot_ok,
+        "demo_csv_exists": os.path.isfile(_csv_path()),
+        "python": sys.version.split()[0],
+        "action_whitelist": list(ACTION_NAMES),
+        "no_realtime_bridge": True,
+        "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+def read_doc(name):
+    """读取白名单文档；拒绝未知名称与任何路径形式。"""
+    if name not in DOC_FILES:
+        raise KeyError("未授权的文档: %s" % name)
+    full = os.path.abspath(os.path.join(_ROOT, *DOC_FILES[name]))
+    if not full.startswith(os.path.abspath(_ROOT)) or not os.path.isfile(full):
+        raise IOError("文档不存在")
+    with open(full, "r", encoding="utf-8") as handle:
+        text = handle.read(MAX_DOC_CHARS)
+    return {"name": name, "path": full, "content": text, "chars": len(text)}
+
+
+def _argv_for(name):
+    if name == "tests":
+        return [sys.executable, "-m", "unittest", "discover", "-s",
+                os.path.join(_ROOT, "research", "tests")]
+    return [sys.executable, os.path.join(_ROOT, "research", "cli.py"), name]
+
+
+def run_action(name):
+    """执行固定白名单里的本地研究命令。无参数、无 shell、无外网、串行、有超时。"""
+    if name not in ACTION_NAMES:
+        raise KeyError("未授权的动作: %s" % name)
+    argv = _argv_for(name)
+    env = dict(os.environ)
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+                "ALL_PROXY", "all_proxy"):
+        env.pop(key, None)
+    env["PYTHONIOENCODING"] = "utf-8"
+    # tests 动作会跑完整 unittest 套件；给子进程打标记，避免套件里
+    # 的「调用 tests 动作」用例再次派生子进程，形成无限递归。
+    env["CLAW_ACTION_CHILD"] = "1"
+    started = time.time()
+    with ACTION_LOCK:
+        try:
+            proc = subprocess.run(argv, cwd=_ROOT, env=env,
+                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                  timeout=ACTION_TIMEOUT)
+            output = proc.stdout.decode("utf-8", "replace")
+            code = proc.returncode
+        except subprocess.TimeoutExpired as exc:
+            output = (exc.output or b"").decode("utf-8", "replace")
+            output += "\n[claw] 命令超过 %s 秒，已终止" % ACTION_TIMEOUT
+            code = -1
+        except Exception as exc:
+            output = "[claw] 命令启动失败: %s" % exc
+            code = -2
+        duration_ms = int((time.time() - started) * 1000)
+        truncated = len(output) > MAX_OUTPUT_CHARS
+        if truncated:
+            output = output[:MAX_OUTPUT_CHARS] + "\n…（输出已截断）"
+        result = {
+            "ok": code == 0,
+            "name": name,
+            "exit_code": code,
+            "output": output,
+            "duration_ms": duration_ms,
+            "truncated": truncated,
+            "command": " ".join(argv),
+            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        ACTION_LOG.append({
+            "ts": result["ts"], "name": name, "ok": result["ok"],
+            "exit_code": code, "duration_ms": duration_ms,
+            "preview": output[:200],
+        })
+        del ACTION_LOG[:-50]
+        return result
+
+
 def _scan_forbidden(value):
     if isinstance(value, dict):
         for key, item in value.items():
@@ -204,7 +433,7 @@ def save_rules(payload):
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
-    server_version = "ClawLocal/1.0"
+    server_version = "ClawLocal/2.0"
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[claw] %s - %s\n" % (self.address_string(), fmt % args))
@@ -220,29 +449,42 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _json(self, status, payload):
+        return self._send(status, json.dumps(payload, ensure_ascii=False),
+                          "application/json; charset=utf-8")
+
     def do_GET(self):
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         if path == "/api/health":
-            return self._send(200, json.dumps({"ok": True, "bind": self.server.server_address[0]}),
-                              "application/json; charset=utf-8")
+            return self._json(200, {"ok": True, "bind": self.server.server_address[0]})
         if path == "/api/dashboard":
             try:
-                payload = build_dashboard()
-                return self._send(200, json.dumps(payload, ensure_ascii=False),
-                                  "application/json; charset=utf-8")
+                return self._json(200, build_dashboard())
             except Exception as exc:
-                return self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False),
-                                  "application/json; charset=utf-8")
+                return self._json(500, {"error": str(exc)})
         if path == "/api/rules":
             try:
-                return self._send(200, json.dumps(rules_payload(), ensure_ascii=False),
-                                  "application/json; charset=utf-8")
+                return self._json(200, rules_payload())
             except Exception as exc:
-                return self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False),
-                                  "application/json; charset=utf-8")
+                return self._json(500, {"error": str(exc)})
         if path == "/api/capabilities":
-            return self._send(200, json.dumps({"capabilities": CAPABILITIES}, ensure_ascii=False),
-                              "application/json; charset=utf-8")
+            return self._json(200, {"capabilities": CAPABILITIES})
+        if path == "/api/features":
+            return self._json(200, features_payload())
+        if path == "/api/status":
+            try:
+                return self._json(200, status_payload())
+            except Exception as exc:
+                return self._json(500, {"error": str(exc)})
+        if path == "/api/action-log":
+            return self._json(200, {"items": list(reversed(ACTION_LOG))})
+        if path == "/api/docs":
+            name = (parse_qs(parsed.query).get("name") or [""])[0]
+            try:
+                return self._json(200, read_doc(name))
+            except (KeyError, IOError, OSError) as exc:
+                return self._json(400, {"error": str(exc)})
         name = "index.html" if path in ("/", "") else os.path.basename(path)
         full = os.path.abspath(os.path.join(WEB_DIR, name))
         if not full.startswith(os.path.abspath(WEB_DIR)) or not os.path.isfile(full):
@@ -251,28 +493,37 @@ class DashboardHandler(BaseHTTPRequestHandler):
         with open(full, "rb") as handle:
             return self._send(200, handle.read(), CONTENT_TYPES.get(ext, "application/octet-stream"))
 
-    def do_POST(self):
-        path = urlparse(self.path).path
-        if path != "/api/rules":
-            return self._send(405, "method not allowed", "text/plain; charset=utf-8")
+    def _read_body(self, limit):
         try:
             length = int(self.headers.get("Content-Length", "0") or 0)
         except (TypeError, ValueError):
-            return self._send(400, "invalid content-length", "text/plain; charset=utf-8")
-        if length <= 0 or length > MAX_RULES_BYTES:
-            return self._send(413, "payload too large", "text/plain; charset=utf-8")
+            return None
+        if length <= 0 or length > limit:
+            return None
         try:
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
-        except Exception as exc:
-            return self._send(400, json.dumps({"error": "invalid json: %s" % exc}, ensure_ascii=False),
-                              "application/json; charset=utf-8")
-        try:
-            result = save_rules(payload)
-        except Exception as exc:
-            return self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False),
-                              "application/json; charset=utf-8")
-        return self._send(200, json.dumps(result, ensure_ascii=False),
-                          "application/json; charset=utf-8")
+            return json.loads(self.rfile.read(length).decode("utf-8"))
+        except Exception:
+            return None
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if path == "/api/rules":
+            payload = self._read_body(MAX_RULES_BYTES)
+            if payload is None:
+                return self._json(400, {"error": "请求体无效或过大"})
+            try:
+                return self._json(200, save_rules(payload))
+            except Exception as exc:
+                return self._json(400, {"error": str(exc)})
+        if path == "/api/actions":
+            payload = self._read_body(MAX_ACTION_BYTES)
+            if not isinstance(payload, dict):
+                return self._json(400, {"error": "请求体必须是 {\"name\": ...}"})
+            try:
+                return self._json(200, run_action(payload.get("name")))
+            except (KeyError, TypeError) as exc:
+                return self._json(400, {"error": str(exc)})
+        return self._send(405, "method not allowed", "text/plain; charset=utf-8")
 
 
 def serve(host="127.0.0.1", port=8765):
@@ -280,7 +531,8 @@ def serve(host="127.0.0.1", port=8765):
         raise ValueError("refusing to bind non-loopback address: %s" % host)
     server = ThreadingHTTPServer((host, port), DashboardHandler)
     server.daemon_threads = True
-    sys.stderr.write("[claw] local dashboard at http://%s:%s/ (read-only)\n" % (host, port))
+    sys.stderr.write("[claw] local workbench at http://%s:%s/ (read-only, no broker)\n"
+                     % (host, port))
     return server
 
 

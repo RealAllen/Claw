@@ -1,7 +1,7 @@
 # Claw · 项目交接卡（压缩版）
 
 > **用途**：新会话把本文件贴给 AI，或让它读 `PROJECT_CONTEXT.md`，即可还原全部上下文。
-> **更新**：2026-11-08（北京时间）｜**状态**：研究层 / 模拟盘 / QMT 执行层已完成，**实盘未启用**
+> **更新**：2026-11-08（北京时间）｜**状态**：研究层 / 模拟盘 / QMT 执行层已完成，**本地工作台已带左侧功能导航栏**，**实盘未启用**
 
 ## 1. 用户原始目标（一句话）
 
@@ -20,9 +20,10 @@
 ## 3. 现在有什么（已完成）
 
 - 位置 `C:\Users\zxs\WorkBuddy\Claw`；PyCharm 2024.3.5 已打开，6 个一键运行配置。
-- Git：`https://github.com/RealAllen/Claw`（Public，`main`），3 个提交，最新 `24236a4`；本地 = 远程，工作区干净，**60 个文件**。
-- CI `.github/workflows/tests.yml` 两次运行均 **success**；本地 **53 项单元测试全绿**。
-- 本地看板 `http://127.0.0.1:8765/`：`config.html` 改指标 / 阈值（只写本地 `shared/rules/live.json`），`index.html` 盘后复盘。
+- Git：`https://github.com/RealAllen/Claw`（Public，`main`）；本地 = 远程，工作区干净，60+ 文件（最新提交见 `git log`）。
+- CI `.github/workflows/tests.yml` 多次运行均 **success**；本地 **68 项单元测试全绿**。
+- **本地工作台** `http://127.0.0.1:8765/`：`index.html` 是唯一入口，左侧固定功能导航栏（5 组 / 23 项），右侧切换视图。分组：工作台、研究与演练、执行层、文档与合规、系统；`config.html` 自动跳到 `#config`。
+- 导航项可直接**使用**：6 个白名单本地命令（demo / backtest / scan / qmt-sim / export / tests）经 `POST /api/actions` 真实执行并在「运行结果」显示输出；8 份文档经 `/api/docs` 在线阅读；`/api/features` 下发功能清单，`/api/status` 只读展示六道闸门与哈希一致性。
 - **QMT 执行层全链路**：`run_time` 定时器（3 秒）→ `get_full_tick` 全市场 L1 → 两级筛选 → 风控硬前置 → 幂等 `client_order_id` → `passorder` → 回报轮询 / 超时撤单 → 对账熔断 → 内存审计。买入扫全市场，**卖出只扫持仓**。
 - 指标：涨跌幅 / 1-3-5 分钟涨速 / 振幅 / 量比 / 委比 / 换手 / 资金流；候选再算 MA / MACD / RSI / KDJ / BOLL / 突破；持仓再算盈亏 / 自最高点回撤 / 持有分钟。
 - 无券商演练：`python research/cli.py qmt-sim`（内存假 C 对象，可看到完整自动买卖链路）。
@@ -39,7 +40,9 @@
 |---|---|
 | 指标 / 阈值 / 标的池 / 时间窗 | `shared/rules/live.json`（配置台读写；当前全是**占位示例值**） |
 | 规则求值 / 风控 / 幂等 / 卖出判定 | `shared/strategy_core.py`（研究层与 QMT 共用；**改完必须跑 `python research/cli.py export`** 同步沙箱副本并核对哈希） |
-| 选股 / 回测 / 绩效 / 看板 | `research/`：`rules_engine.py`、`backtest.py`、`server.py`、`web/` |
+| 选股 / 回测 / 绩效 | `research/`：`rules_engine.py`、`backtest.py`、`metrics.py` |
+| 左侧导航 / 功能清单 / 白名单动作 / 文档接口 | `research/server.py`（`FEATURES` / `ACTION_NAMES` / `DOC_FILES`）+ `research/web/nav.js` |
+| 页面与样式 | `research/web/index.html`、`app.js`（复盘）、`config.js`（配置台）、`style.css` |
 | 实盘链路 | `execution/qmt/strategy.py`、`order_manager.py`、`risk_gate.py`、`reconcile.py`、`audit.py` |
 | 券商差异 / API 签名 | `execution/qmt/broker_api.py`（只改这里）+ `live_config.py`（参数与闸门） |
 | 文档 | `docs/`（合规、指标字典、上线检查表）、`ops/`（运维、应急） |
@@ -62,8 +65,10 @@ python research/cli.py backtest      # 回测
 python research/cli.py scan          # 扫描
 python research/cli.py export        # 导出规则 + 内核副本到 QMT 沙箱
 python research/cli.py qmt-sim       # 无券商全链路演练
-python research/cli.py serve --port 8765
+python research/cli.py serve --port 8765   # 工作台（左侧导航栏）
 ```
+
+> 加新功能时：在 `research/server.py` 的 `FEATURES` 加一项（`view` / `action` / `doc`），`action` 需同时加入 `ACTION_NAMES` 与 `_argv_for`，`doc` 需加入 `DOC_FILES`；前端 `nav.js` 的 `FALLBACK` 同步一份离线降级清单，`index.html` 加对应 `view-xxx` 容器。
 
 ## 8. 下次开场可直接粘贴
 

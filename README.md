@@ -37,15 +37,22 @@ python research/cli.py qmt-sim     # 无券商演练：跑完整实时自动买�
 python research/cli.py export      # 导出 QMT 沙箱可粘贴的规则字面量 + 内核副本
 python research/cli.py serve       # 启动仅 127.0.0.1 的本地看板
 
-python -m unittest discover -s research/tests -v   # 53 项单元测试
+python -m unittest discover -s research/tests -v   # 68 项单元测试
 ```
 
-`serve` 默认绑定 `127.0.0.1:8765`：
+`serve` 默认绑定 `127.0.0.1:8765`，打开 `http://127.0.0.1:8765/` 即进入**带左侧功能导航栏的工作台**：
 
-- `http://127.0.0.1:8765/` → 研究看板 + 能力归属对照
-- `http://127.0.0.1:8765/config.html` → **策略配置台**：可视化编辑指标、阈值、标的池、风控，保存后导出给 QMT
+| 导航分组 | 能做什么 |
+|---|---|
+| 工作台 | 功能总览（全部能力梳理）、策略配置台、模拟盘复盘、最新扫描、能力归属 |
+| 研究与演练 | 一键执行：生成演示数据 / 回测 / 扫描 / 无券商演练 / 导出沙箱规则 / 单元测试，输出直接显示在「运行结果」 |
+| 执行层 | QMT 执行层状态、六道闸门只读画像、人工导入步骤、安全状态 |
+| 文档与合规 | 在线阅读指标字典、上线检查表、合规边界、QMT 接入说明、运维 / 应急手册、交接卡、README |
+| 系统 | 运行结果、操作日志（内存，最近 50 条） |
 
-直接用浏览器打开 `research/web/index.html` 也能看离线演示数据；配置台需要本地服务才能读写规则文件。
+旧地址 `/config.html` 会自动跳转到 `index.html#config`。直接用浏览器打开 `research/web/index.html` 也能看离线演示数据与导航（动作执行、文档阅读、规则保存需要本地服务）。
+
+服务端新增只读 / 白名单接口：`GET /api/features`（导航清单）、`/api/status`、`/api/docs?name=...`、`/api/action-log`，以及 `POST /api/actions`（只允许 6 个固定本地研究命令，无参数、不经过 shell）。**没有任何下单、账户或实时桥接接口。**
 
 ## 用 PyCharm 打开（项目已配置好）
 
@@ -57,7 +64,7 @@ python -m unittest discover -s research/tests -v   # 53 项单元测试
 
    | 配置名 | 等价命令 |
    |---|---|
-   | `1 全部单元测试 (53)` | `python -m unittest discover -s research/tests -v` |
+   | `1 全部单元测试 (68)` | `python -m unittest discover -s research/tests -v` |
    | `2 无券商全链路演练` | `python research/cli.py qmt-sim` |
    | `3 生成演示数据` | `python research/cli.py demo` |
    | `4 回测` | `python research/cli.py backtest` |
@@ -72,7 +79,7 @@ python -m unittest discover -s research/tests -v   # 53 项单元测试
 
 - 本地仓库已初始化，默认分支 `main`，初始提交包含 60 个源文件 / 文档 / 配置台 / PyCharm 配置 / CI 文件。
 - `.gitignore` 排除 `data/`（演示数据、回测结果）、`logs/`、`.workbuddy/`、所有 `*.secret` / `*.key` / `*.token` / `*_credentials.*` / `.env*`，以及 PyCharm 的本机状态文件。**仓库内不含账号、密码或真实行情数据。**
-- `.gitattributes` 统一 LF 行尾。`.github/workflows/tests.yml` 在 push / PR 时对 Python 3.9 / 3.11 / 3.13 跑 53 项单元测试、5 个 CLI 入口冒烟，并用 AST 扫描阻止 Python 3.7+ 语法混入（保证同一份内核可贴进 QMT 的 3.6.8 沙箱）。
+- `.gitattributes` 统一 LF 行尾。`.github/workflows/tests.yml` 在 push / PR 时对 Python 3.9 / 3.11 / 3.13 跑 68 项单元测试、5 个 CLI 入口冒烟，并用 AST 扫描阻止 Python 3.7+ 语法混入（保证同一份内核可贴进 QMT 的 3.6.8 沙箱）。
 - 远程仓库：`https://github.com/RealAllen/Claw`（`origin`，分支 `main`，与本地提交一致）。2026-11-08 完成首次推送，GitHub Actions `tests` 工作流首次运行成功。
 - 若 `git push` 报 `CONNECT tunnel failed, 502` 或 `schannel: server closed abruptly`，是会话注入的 `HTTP(S)_PROXY` 阻断了 `github.com` 的 Git 通道。清空 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`（含小写形式）后执行 `git -c http.proxy= -c https.proxy= -c http.sslBackend=openssl push origin main`；首次由 Git Credential Manager 弹窗登录 GitHub，凭据会缓存，后续直接 `git push` 即可。
 
@@ -87,10 +94,10 @@ research/
   indicators.py             快照类 + K 线类指标
   rules_engine.py           规则 DSL 校验与两级筛选编排
   data.py / backtest.py / metrics.py
-  server.py                 仅 127.0.0.1 的 HTTP 服务 + JSON API + 规则保存
+  server.py                 仅 127.0.0.1 的 HTTP 服务 + 功能清单 / 白名单动作 / 文档 / 状态 API
   cli.py                    统一入口
-  web/                      index.html 看板、config.html 配置台
-  tests/                    53 项 unittest
+  web/                      左侧导航工作台：index.html + nav.js + app.js + config.js + style.css
+  tests/                    68 项 unittest（含工作台接口与安全边界）
 execution/qmt/
   live_config.py            ★ 唯一需要人工修改的开关文件（账号/模式/4 道闸门/API 参数）
   broker_api.py             ★ 券商 API 适配层（所有因券商而异的签名）+ probe() 诊断
@@ -107,7 +114,7 @@ docs/ ops/                  合规清单、指标字典、上线检查表、运�
 
 1. **零第三方依赖 + Python 3.6 语法**：同一份 `strategy_core.py` 既跑本机 Python 3.13 研究，也直接粘贴进 QMT 内置沙箱。
 2. **不接触凭据**：仓库无账号/密码/资金密码字段；`live_config.ACCOUNT_ID` 只是资金账号，日志脱敏。
-3. **只读研究层**：研究层唯一写操作是保存本地规则 JSON（`POST /api/rules`），不含任何下单能力、不监听公网、不与 QMT 建实时通道。
+3. **只读研究层**：研究层写操作只限于保存本地规则 JSON（`POST /api/rules`）与执行 6 个固定白名单本地研究命令（`POST /api/actions`），不含任何下单能力、不监听公网、不与 QMT 建实时通道。
 4. **执行层默认不交易**：`KILL_SWITCH=True`、`DRY_RUN=True`、`MODE=semi_auto`、`REPORT_CONFIRMED=False`、`LIVE_ACKNOWLEDGED=False`；`activation_status()` 任一不满足即强制 dry-run。
 5. **演示数据不是生产数据**：`demo` 生成确定性合成数据，页面与结果都标注 `DEMO`。
 
@@ -115,11 +122,11 @@ docs/ ops/                  合规清单、指标字典、上线检查表、运�
 
 | 验证项 | 结果 |
 |---|---|
-| 单元测试 | `python -m unittest discover -s research/tests -v` → **53 项全部通过**（含自动买卖、半自动、持仓卖出、幂等、超时撤单、Kill Switch、账号脱敏） |
+| 单元测试 | `python -m unittest discover -s research/tests -v` → **68 项全部通过**（含自动买卖、半自动、持仓卖出、幂等、超时撤单、Kill Switch、账号脱敏） |
 | 无券商演练 | `qmt-sim`：3 个时点扫描、7 笔模拟委托（6 买 1 卖）、成交回报更新持仓与 T+1、定时器注册 `on_timer/3nSecond`，全部落在内存假对象 |
 | 回测 / 扫描 | 4320 行演示数据；116 笔成交信号、28 笔拦截；示例规则总收益 +0.7695%（**合成数据 + 未优化阈值，不是策略结论**） |
 | 规则导出 | `rules_snapshot.py` 指纹 `32d1ca1e…`；内核与指标副本 SHA-256 与源文件一致 |
-| 本地服务 | `/api/health`、`/api/dashboard`、`/api/rules`、`/api/capabilities`、静态页均 200；目录穿越 404；非 `/api/rules` 的 POST 405；含 `account_id` 的规则保存 400；非回环绑定被拒绝 |
+| 本地服务 | `/api/health`、`/api/dashboard`、`/api/rules`、`/api/capabilities`、`/api/features`、`/api/status`、`/api/docs`、`/api/actions`、`/api/action-log`、静态页均 200；目录穿越 / 未知文档 / 未知动作被拒；非白名单 POST 405；含 `account_id` 的规则保存 400；非回环绑定被拒绝 |
 | 语法 | `node --check` 通过；30 个 Python 文件静态扫描无 3.7+ 专有语法 |
 | 安全默认 | 应用内无账户凭据；四道闸门全部关闭；演练结束自动恢复 |
 

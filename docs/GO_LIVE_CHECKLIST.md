@@ -27,7 +27,7 @@
 
 ## 阶段 1~2 · 研究层与模拟盘（已完成，零实盘风险）
 
-- [x] `python -m unittest discover -s research/tests -v` → **53 项全绿**
+- [x] `python -m unittest discover -s research/tests -v` → **68 项全绿**
 - [x] `demo` / `backtest` / `scan` / `export` / `qmt-sim` 五个入口跑通
 - [x] 回测与实盘共用同一份 `shared/rules/live.json` 与 `shared/strategy_core.py`（哈希一致）
 - [x] 买入扫全市场、卖出只扫持仓；两级惰性计算；持仓盈亏/回撤/持有时间指标
@@ -41,7 +41,7 @@
 - [x] 执行层已实现：定时器全推行情 → 两级筛选 → 风控 → 幂等下单 → 回报轮询 → 超时撤单 → 对账 → 熔断 → 审计
 - [x] 默认 `DRY_RUN=True` / `KILL_SWITCH=True`，四道闸门集中在 `live_config.py`
 - [x] 沙箱内无文件读写、无外部网络、无数据库、无第三方库、无实时桥接
-- [x] 53 项测试覆盖：自动买卖、半自动只出信号、持仓卖出、幂等去重、超时撤单、Kill Switch、账号脱敏
+- [x] 68 项测试覆盖：自动买卖、半自动只出信号、持仓卖出、幂等去重、超时撤单、Kill Switch、账号脱敏
 - [ ] `python research/cli.py export` → **人工**粘贴/导入 QMT（禁止实时桥接）
 - [ ] 用哈希核对 `shared/strategy_core.py` 与沙箱内副本逐字一致
 - [ ] QMT 模拟盘跑通 `probe(C)` / `status(C)` / `on_timer` 全链路

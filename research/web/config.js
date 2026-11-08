@@ -104,7 +104,7 @@
   }
 
   function renderCapabilities(list) {
-    var body = el('cap').getElementsByTagName('tbody')[0];
+    var body = el('cap-config').getElementsByTagName('tbody')[0];
     var html = '';
     for (var i = 0; i < list.length; i++) {
       var c = list[i];
@@ -214,7 +214,7 @@
       .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
       .then(function (data) { render(data); msg('已载入本地规则，可开始编辑'); })
       .catch(function (e) {
-        msg('无法读取本地服务：请先运行 python research/cli.py serve 后访问 http://127.0.0.1:8765/config.html（' + e.message + '）', true);
+        msg('无法读取本地服务：请先运行 python research/cli.py serve 后访问 http://127.0.0.1:8765/#config（' + e.message + '）', true);
       });
   }
 

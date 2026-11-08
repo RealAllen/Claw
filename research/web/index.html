@@ -3,18 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claw · 本地量化研究看板</title>
+<title>Claw · 本地量化工作台</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="wrap">
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="logo">Claw <span>·</span> 工作台</div>
+    <div class="tagline">浙商证券 QMT · 本地部署</div>
+    <span class="pill">实盘未启用 · 只读</span>
+  </div>
+  <nav class="nav" id="nav" aria-label="功能导航"></nav>
+  <div class="sidebar-foot">
+    仅绑定 <b>127.0.0.1</b><br>
+    不连券商 · 不存凭据 · 不实时桥接<br>
+    <span id="nav-status">功能清单载入中…</span>
+  </div>
+</aside>
+
+<main class="main">
   <header class="top">
     <div>
-      <h1>Claw · 本地量化研究看板</h1>
-      <p class="sub">零依赖 · 纯只读 · 不接触交易凭据 · 仅绑定 127.0.0.1</p>
+      <h1 id="page-title">功能总览</h1>
+      <p class="sub">左侧导航直达全部功能 · 零依赖 · 纯本地 · 不接触交易凭据</p>
     </div>
     <div class="badges">
-      <a class="badge" href="config.html">策略配置台 →</a>
       <span id="badge-demo" class="badge warn">数据加载中</span>
       <span class="badge ok">Kill Switch ON</span>
       <span class="badge">半自动（人工确认）</span>
@@ -22,61 +36,236 @@
   </header>
 
   <div class="notice">
-    <strong>本页的定位：</strong>这是<strong>盘前配置 + 盘后复盘</strong>工作台，不参与盘中实时回路。
-    「使用账户 → 盘中实时选股 → 指标判定 → 自动买卖」这四项能力已完整实现在
-    <strong>浙商证券标准版 QMT 内置 Python 沙箱</strong>里（策略每 3 秒扫全市场全推行情、两级筛选、风控、幂等下单、回报轮询、对账熔断），
-    实时日志/委托/持仓请在 QMT 客户端查看。两层之间只允许盘前盘后<strong>人工</strong>中转规则，
-    <strong>禁止任何实时 HTTP / socket / 文件桥接</strong>。本页不展示也不存储任何账户密码。
+    <strong>定位：</strong>本工作台是<strong>盘前配置 + 盘后复盘 + 本地研究/演练</strong>。
+    「使用账户 → 盘中实时选股 → 指标判定 → 自动买卖」已完整实现在<strong>浙商证券 QMT 内置 Python 沙箱</strong>里，
+    实时日志 / 委托 / 持仓请在 QMT 客户端查看。两层之间只允许盘前盘后<strong>人工</strong>中转规则，
+    <strong>禁止任何实时 HTTP / socket / 文件桥接</strong>。
   </div>
 
-  <section class="card">
-    <div class="card-head"><h2>能力归属 · 你要的功能分别跑在哪里</h2><a class="badge" href="config.html">去配置台编辑指标 →</a></div>
-    <div class="table-wrap"><table id="cap"><thead><tr><th>目标</th><th>实现位置</th><th>具体做法</th><th>本页承担</th></tr></thead><tbody></tbody></table></div>
-  </section>
-
-  <section class="kpis" id="kpis"></section>
-
-  <section class="card">
-    <div class="card-head">
-      <h2>模拟盘净值曲线</h2>
-      <span class="hint" id="curve-hint"></span>
+  <!-- ============ 功能总览 ============ -->
+  <section class="view active" id="view-overview">
+    <div class="view-head">
+      <h2>项目功能梳理</h2>
+      <span class="desc">按分组列出当前全部能力，标注运行层级与使用方式；点「打开」即可使用。</span>
     </div>
-    <div id="chart" class="chart"></div>
-    <p class="hint" id="assumptions"></p>
+    <div class="layer-note">
+      <div class="card">
+        <h2>本地研究 / 配置 / 复盘层</h2>
+        <p class="hint">本工作台。数据、指标、规则编辑、回测、扫描、演练、规则导出、文档与安全状态。全部只读或只写本地文件。</p>
+      </div>
+      <div class="card">
+        <h2>券商 QMT 实时执行层</h2>
+        <p class="hint">本机 QMT 客户端内置沙箱。定时器全推行情 → 全市场选股 → 指标判定 → 风控 → 幂等下单 → 回报/对账/熔断。默认不发真实委托。</p>
+      </div>
+      <div class="card">
+        <h2>两层之间（禁止）</h2>
+        <p class="hint">实时 HTTP / socket / 文件桥接、第三方中转、同花顺 UI 自动化下单、文件单。规则与内核只允许盘前人工导入。</p>
+      </div>
+    </div>
+    <div id="feature-groups"></div>
   </section>
 
-  <div class="grid">
+  <!-- ============ 策略配置台 ============ -->
+  <section class="view" id="view-config">
+    <div class="view-head">
+      <h2>策略配置台</h2>
+      <span class="desc">编辑「选股指标要求」→ 保存本地规则 JSON → 盘前人工导出到 QMT 沙箱。</span>
+    </div>
+    <div class="notice warn">
+      <strong>先看这条：</strong>这里保存的只是<b>本地规则 JSON</b>，不会连接账户、不会下单，也不会与 QMT 建立任何实时通道。
+      规则改完后需在盘前手动执行「导出沙箱规则」并粘贴进 QMT，禁止搭自动同步。
+    </div>
+
     <section class="card">
-      <div class="card-head"><h2>成交信号流水</h2><span class="hint" id="events-hint"></span></div>
-      <div class="table-wrap"><table id="events"><thead><tr><th>时间</th><th>标的</th><th>方向</th><th>价格</th><th>数量</th><th>金额</th><th>幂等 ID</th></tr></thead><tbody></tbody></table></div>
+      <div class="card-head"><h2>你要的四项能力 · 分别在哪里实现</h2><span class="hint">架构对照</span></div>
+      <div class="table-wrap"><table class="cap" id="cap-config"><thead><tr><th>目标</th><th>实现位置</th><th>具体做法</th><th>本页是否承担</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="card">
-      <div class="card-head"><h2>风控 / 精算拦截</h2><span class="hint" id="reject-hint"></span></div>
-      <div class="table-wrap"><table id="rejections"><thead><tr><th>时间</th><th>标的</th><th>阶段</th><th>原因</th></tr></thead><tbody></tbody></table></div>
-    </section>
-  </div>
+      <div class="card-head"><h2>规则编辑</h2><span class="hint" id="digest">载入中…</span></div>
 
-  <div class="grid">
+      <div class="subhead">基础</div>
+      <div class="row">
+        <label>规则名称<input type="text" id="f-name"></label>
+        <label>版本<input type="text" class="short" id="f-version"></label>
+        <label>模式
+          <select id="f-mode">
+            <option value="semi_auto">半自动（只出信号，人工下单）</option>
+            <option value="full_auto">全自动（需 QMT 内另行开启）</option>
+            <option value="off">停用</option>
+          </select>
+        </label>
+        <label>信号冷却(分钟)<input type="number" id="f-cooldown" min="0"></label>
+        <label>交易时间窗<input type="text" id="f-windows" placeholder="09:35-11:25, 13:05-14:50"></label>
+      </div>
+
+      <div class="subhead">标的池过滤</div>
+      <div class="row">
+        <label><input type="checkbox" id="f-ex-st"> 排除 ST</label>
+        <label><input type="checkbox" id="f-ex-susp"> 排除停牌</label>
+        <label><input type="checkbox" id="f-ex-up"> 排除涨停</label>
+        <label><input type="checkbox" id="f-ex-down"> 排除跌停</label>
+        <label>允许板块<input type="text" id="f-boards" placeholder="主板, 创业板"></label>
+        <label>最少上市天数<input type="number" id="f-days" min="0"></label>
+        <label>最小成交额(元)<input type="number" id="f-minamount" min="0" step="1000000"></label>
+      </div>
+
+      <div class="subhead">风控硬前置（下单前逐条校验，不可跳过）</div>
+      <div class="row" id="risk-row"></div>
+
+      <div class="subhead">买入 · 一级快照条件（全市场粗筛）</div>
+      <div id="buy-cond"></div>
+      <button class="btn" data-add="buy-cond">+ 添加条件</button>
+      <div class="row" style="margin-top:8px">
+        <label>组合逻辑<select id="f-buy-logic"><option value="AND">全部满足 AND</option><option value="OR">任一满足 OR</option></select></label>
+      </div>
+
+      <div class="subhead">买入 · 二级 K 线条件（只对候选池计算）</div>
+      <div id="buy-precision"></div>
+      <button class="btn" data-add="buy-precision">+ 添加条件</button>
+
+      <div class="subhead">卖出 · 持仓条件（只对已持有且可卖的仓位判定）</div>
+      <div id="sell-cond"></div>
+      <button class="btn" data-add="sell-cond">+ 添加条件</button>
+      <div class="row" style="margin-top:8px">
+        <label>组合逻辑<select id="f-sell-logic"><option value="OR">任一满足 OR</option><option value="AND">全部满足 AND</option></select></label>
+      </div>
+
+      <div class="subhead">原始 JSON（保存时以此为准，可直接手改）</div>
+      <textarea id="raw" spellcheck="false"></textarea>
+      <div class="actions">
+        <button class="btn primary" id="save">保存到本地规则</button>
+        <button class="btn" id="reload">重新载入</button>
+        <button class="btn" id="from-json">把 JSON 载入到表单</button>
+        <span id="msg"></span>
+      </div>
+      <p class="hint" style="margin-top:10px">保存后从左侧导航点「导出沙箱规则」生成 <code>rules_snapshot.py</code>，核对规则指纹后<strong>人工</strong>导入 QMT。</p>
+    </section>
+  </section>
+
+  <!-- ============ 模拟盘复盘 ============ -->
+  <section class="view" id="view-review">
+    <div class="view-head"><h2>模拟盘复盘</h2><span class="desc">基于本地 CSV 与当前规则的回测结果；非真实成交。</span></div>
+    <section class="kpis" id="kpis"></section>
     <section class="card">
-      <div class="card-head"><h2>最新一期扫描结果</h2><span class="hint" id="scan-hint"></span></div>
-      <div class="table-wrap"><table id="scan"><thead><tr><th>标的</th><th>最新价</th><th>涨跌幅</th><th>放量倍数</th><th>信号</th></tr></thead><tbody></tbody></table></div>
+      <div class="card-head"><h2>模拟盘净值曲线</h2><span class="hint" id="curve-hint"></span></div>
+      <div id="chart" class="chart"></div>
+      <p class="hint" id="assumptions"></p>
     </section>
-
+    <div class="grid">
+      <section class="card">
+        <div class="card-head"><h2>成交信号流水</h2><span class="hint" id="events-hint"></span></div>
+        <div class="table-wrap"><table id="events"><thead><tr><th>时间</th><th>标的</th><th>方向</th><th>价格</th><th>数量</th><th>金额</th><th>幂等 ID</th></tr></thead><tbody></tbody></table></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>风控 / 精算拦截</h2><span class="hint" id="reject-hint"></span></div>
+        <div class="table-wrap"><table id="rejections"><thead><tr><th>时间</th><th>标的</th><th>阶段</th><th>原因</th></tr></thead><tbody></tbody></table></div>
+      </section>
+    </div>
     <section class="card">
       <div class="card-head"><h2>压力测试（假设情景）</h2><span class="hint">仅风险画像，非损失预测</span></div>
       <div class="table-wrap"><table id="stress"><thead><tr><th>情景</th><th>冲击</th><th>净值变化</th><th>净值之后</th></tr></thead><tbody></tbody></table></div>
-      <div class="card-head spaced"><h2>安全状态</h2></div>
-      <ul class="safety" id="safety"></ul>
     </section>
-  </div>
+  </section>
+
+  <!-- ============ 最新扫描 ============ -->
+  <section class="view" id="view-scan">
+    <div class="view-head"><h2>最新扫描结果</h2><span class="desc" id="scan-hint"></span></div>
+    <section class="card">
+      <div class="table-wrap"><table id="scan"><thead><tr><th>标的</th><th>最新价</th><th>涨跌幅</th><th>放量倍数</th><th>信号</th></tr></thead><tbody></tbody></table></div>
+    </section>
+    <div class="notice">重新跑一次扫描：左侧导航「研究与演练 → 扫描最新 bar」。盘中实时扫描由 QMT 沙箱承担。</div>
+  </section>
+
+  <!-- ============ 能力归属 ============ -->
+  <section class="view" id="view-cap">
+    <div class="view-head"><h2>能力归属</h2><span class="desc">你最初提出的四项能力，分别落在哪一层。</span></div>
+    <section class="card">
+      <div class="table-wrap"><table id="cap"><thead><tr><th>目标</th><th>实现位置</th><th>具体做法</th><th>本地网页承担</th></tr></thead><tbody></tbody></table></div>
+    </section>
+  </section>
+
+  <!-- ============ QMT 执行层 ============ -->
+  <section class="view" id="view-qmt">
+    <div class="view-head"><h2>QMT 执行层状态</h2><span class="desc">只读查看；实时委托与持仓请在 QMT 客户端查看。</span></div>
+    <div class="grid">
+      <section class="card">
+        <h2>实时链路组成</h2>
+        <ol class="steps">
+          <li><span class="mono">run_time</span> 定时器（3 秒）触发 <span class="mono">on_timer</span></li>
+          <li><span class="mono">get_full_tick</span> 取全市场 L1 快照，一级指标粗筛全部标的</li>
+          <li>候选池再算 K 线指标；持仓单独算盈亏 / 回撤 / 持有分钟</li>
+          <li>规则命中 → 风控硬前置 → 幂等 <span class="mono">client_order_id</span></li>
+          <li><span class="mono">passorder</span> → 回报轮询 → 超时撤单 → 对账熔断 → 内存审计</li>
+        </ol>
+        <p class="hint">买入扫全市场，卖出只扫已持有且可卖的仓位。</p>
+      </section>
+      <section class="card">
+        <h2>六道闸门（只读）</h2>
+        <div class="table-wrap"><table class="kv" id="gate-table"><tbody></tbody></table></div>
+      </section>
+    </div>
+    <section class="card">
+      <h2>人工导入步骤</h2>
+      <ol class="steps">
+        <li>在「策略配置台」改好指标与阈值，保存到本地规则。</li>
+        <li>左侧导航点「导出沙箱规则」，生成 <span class="mono">execution/qmt/rules_snapshot.py</span> 并同步策略内核副本。</li>
+        <li>核对 <span class="mono">shared/strategy_core.py</span> 与沙箱副本哈希一致、规则指纹一致。</li>
+        <li>在标准版 QMT 内置 Python 沙箱里<strong>人工</strong>导入，先在模拟盘跑 <span class="mono">broker_api.probe(C)</span>。</li>
+        <li>逐条对照「实盘上线检查表」，收到券商对程序化交易报告的确认反馈后才考虑开闸。</li>
+      </ol>
+      <div class="notice warn" style="margin:14px 0 0"><strong>硬约束：</strong>禁止用本工作台实时驱动 QMT；不做实时桥接；不把账号 / 密码写进项目。</div>
+    </section>
+  </section>
+
+  <!-- ============ 安全状态 ============ -->
+  <section class="view" id="view-safety">
+    <div class="view-head"><h2>安全状态</h2><span class="desc">服务、合规与内核一致性画像，全部由本地只读接口生成。</span></div>
+    <div class="grid">
+      <section class="card">
+        <div class="card-head"><h2>看板侧</h2></div>
+        <ul class="safety" id="safety"></ul>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>系统与闸门</h2><button class="btn" id="btn-refresh-status">刷新</button></div>
+        <div class="table-wrap"><table class="kv" id="status-table"><tbody></tbody></table></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ============ 运行结果 ============ -->
+  <section class="view" id="view-actions">
+    <div class="view-head">
+      <h2>运行结果</h2>
+      <div class="actions" style="margin:0"><button class="btn" id="btn-rerun">重新运行</button><span class="hint" id="action-meta"></span></div>
+    </div>
+    <pre class="output" id="action-output">从左侧「研究与演练」点任一功能即可在此看到真实执行结果。</pre>
+  </section>
+
+  <!-- ============ 文档阅读 ============ -->
+  <section class="view" id="view-doc">
+    <div class="view-head"><h2 id="doc-title">文档</h2><span class="desc mono" id="doc-path"></span></div>
+    <div class="doc-body"><pre class="output doc" id="doc-content">从左侧「文档与合规」选择一份文档。</pre></div>
+  </section>
+
+  <!-- ============ 操作日志 ============ -->
+  <section class="view" id="view-log">
+    <div class="view-head"><h2>操作日志</h2><button class="btn" id="btn-refresh-log">刷新</button></div>
+    <section class="card">
+      <div class="table-wrap"><table id="log-list"><thead><tr><th>时间</th><th>功能</th><th>结果</th><th>退出码</th><th>耗时</th><th>输出预览</th></tr></thead><tbody></tbody></table></div>
+      <p class="hint" style="margin-top:10px">仅保留本次服务进程内最近 50 条，重启清空；不写入磁盘。</p>
+    </section>
+  </section>
 
   <footer>
     <p id="meta"></p>
     <p class="disclaimer">免责声明：以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。任何投资决策应结合个人风险承受能力、资金状况和投资目标独立判断，必要时咨询持牌专业机构。过往表现不预示未来收益。</p>
   </footer>
-</div>
+</main>
+
 <script src="demo_data.js"></script>
 <script src="app.js"></script>
+<script src="config.js"></script>
+<script src="nav.js"></script>
 </body>
 </html>

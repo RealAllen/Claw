@@ -26,6 +26,9 @@ jobs:
           python research/cli.py scan
           python research/cli.py export
           python research/cli.py qmt-sim
+      - name: Frontend JS syntax guard
+        run: |
+          for f in research/web/*.js; do node --check "$f"; done
       - name: Python 3.6 syntax guard (AST)
         run: |
           python - <<'PY'

@@ -5,7 +5,7 @@
 ```bash
 cd C:\Users\zxs\WorkBuddy\Claw
 
-python -m unittest discover -s research/tests -v      # 回归测试（53 项）
+python -m unittest discover -s research/tests -v      # 回归测试（68 项）
 python research/cli.py demo                            # 生成演示数据（仅用于演示）
 python research/cli.py backtest                        # 默认读 shared/rules/live.json
 python research/cli.py scan
